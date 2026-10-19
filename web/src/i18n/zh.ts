@@ -12,6 +12,12 @@ export const zh: Strings = {
   wrongRunes: '图案不对哦，再试一次！',
   locked: '试错太多次了，大门锁上 3 分钟。',
   forgotRunes: '忘记图案了？请校长（爸爸）帮你重置。',
+  demoRunes: '示例巫师的图案是：猫头鹰、魔杖、扫帚、闪电。',
+  orFindName: '或者输入巫师名字',
+  findName: '寻找',
+  noSuchWizard: '还没有这个名字的巫师。',
+  nicknameTaken: '已经有巫师用了这个名字。',
+  headmaster: '校长办公室',
   back: '返回',
   next: '下一步',
   clear: '清除',
@@ -28,6 +34,8 @@ export const zh: Strings = {
 
   owlSending: '猫头鹰正在给校长送信……',
   owlWait: '校长批准后，你就可以进入城堡了。',
+  checkApproval: '猫头鹰回来了吗？',
+  stillWaiting: '还没有。校长还在看你的信。',
 
   sortingTitle: '分院帽',
   sortingIntro: '嗯……让我看看你的脑袋里……',
@@ -91,6 +99,7 @@ export const zh: Strings = {
   shieldUsed: '独角兽毛保护了你！连对没有中断。',
   levelUp: '升级啦！接下来的题更难了。',
   levelDown: '我们先试试简单一点的题。',
+  aboveGrade: '这些题比选定的级别更高。大人可以在设置里把级别调高。',
   sec: '秒',
 
   lessonComplete: '课程完成！',
@@ -105,6 +114,7 @@ export const zh: Strings = {
   attack: '答对了！一个字母飞回了魔法书！',
   counter: '墨影反击了！',
   bossWin: '墨影吃饱了，困了……它成为了图书馆的守护者！',
+  bossLose: '墨影还饿着。休息一下，再来礼堂挑战吧。',
 
   houseCupTitle: '学院杯',
   perWizard: '人均分',
@@ -117,6 +127,8 @@ export const zh: Strings = {
   pensieveDesc: '墨影还藏着的记忆碎片。每道题连续答对 2 次就能取回。',
   practice: '练习这些题',
   recovered: '已取回',
+  pensieveEmpty: '冥想盆是清的。墨影没有藏起记忆。',
+  dueNow: '可以练习了',
 
   shopTitle: '奥利凡德魔杖外观',
   shopNote: '只改变外观，杖芯永远不变。',
@@ -126,9 +138,12 @@ export const zh: Strings = {
   lightsOut: '熄灯啦！',
   curfewMsg: '小巫师该休息了。墨影在黑暗中力量最强，所以城堡要熄灯。',
   lightsBack: '城堡重新亮灯还有',
+  enterCastle: '灯又亮了',
 
   language: '语言',
   speakHelp: '点小喇叭按钮可以听到朗读。',
+  changeGrades: '英语和数学难度',
+  gradesSaved: '已保存。下一节课从新级别开始。',
 
   adminTitle: '校长办公室',
   pendingProfiles: '等待批准',
@@ -136,6 +151,11 @@ export const zh: Strings = {
   reject: '拒绝',
   allPlayers: '所有巫师',
   resetRunes: '重置图案',
+  runesUpdated: '新图案已经保存。',
+  setHeadRunes: '为校长设置 4 个图案',
+  headRunesHint: '只有大人应该知道这些图案。它们保存在这台设备上。',
+  headEnter: '输入校长的图案',
+  rejectedNote: '信被退回来了。',
   stayingAbove: '经常做高一级的题，可以考虑调高',
 
   rotate: '请把设备横过来，魔法效果更好！',

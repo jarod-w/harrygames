@@ -1,26 +1,35 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import confetti from 'canvas-confetti'
 import { useApp } from '../app/state'
+import { homeRoute } from '../game/flow'
+import { createPlayer, nicknameKey } from '../game/player'
+import { checkRunes } from '../game/password'
 import { Avatar, Button, Crest, Panel, Parchment, Screen, SpeakButton, Title } from '../components/ui'
 import { RunePad } from '../components/keyboards'
 import { CastleSilhouette, Inkshade, Wand } from '../components/art'
 import { AVATARS, ENGLISH_LEVELS, HOUSE_IDS, HOUSES, MATH_GRADES, SORTING_QUESTIONS, WAND_CORES, WAND_SKINS } from '../data/catalog'
 import type { HouseId, Player } from '../data/types'
-import { storage } from '../services/StorageService'
+import { SESSION_KEY, storage } from '../services/StorageService'
 import { useI18n } from '../i18n'
 
 export function Splash() {
-  const { go } = useApp()
+  const { go, setPlayer } = useApp()
   const { t } = useI18n()
   return (
     <Screen className="items-center justify-center text-center">
       <button
         className="flex flex-1 flex-col items-center justify-center gap-4"
         onClick={() => {
-          // §6.4: a user tap unlocks audio + speech on iOS
           try { window.speechSynthesis?.speak(new SpeechSynthesisUtterance('')) } catch { /* ignore */ }
-          go({ name: 'login' })
+          void (async () => {
+            const id = sessionStorage.getItem(SESSION_KEY)
+            if (id) {
+              const saved = await storage.getPlayer(id)
+              if (saved) { setPlayer(saved); go(homeRoute(saved, Date.now())); return }
+            }
+            go({ name: 'login' })
+          })()
         }}
       >
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 1 }}>
@@ -47,49 +56,83 @@ export function Login() {
   const [players, setPlayers] = useState<Player[]>([])
   const [picked, setPicked] = useState<Player | null>(null)
   const [runes, setRunes] = useState<string[]>([])
-  const [tries, setTries] = useState(0)
+  const [name, setName] = useState('')
+  const [missing, setMissing] = useState(false)
+  const [locked, setLocked] = useState(false)
   const [err, setErr] = useState(false)
 
-  useEffect(() => { storage.listPlayers().then((ps) => setPlayers(ps.filter((p) => p.status === 'active'))) }, [])
+  const pickedRef = useRef(picked)
+  useEffect(() => { pickedRef.current = picked }, [picked])
+
+  useEffect(() => { storage.listPlayers().then(setPlayers) }, [])
 
   useEffect(() => {
-    if (runes.length !== 4 || !picked) return
-    // Prototype: any 4 runes work except 4 identical ones (to show the error state)
-    const ok = new Set(runes).size > 1
-    const id = setTimeout(() => {
-      if (ok) { setPlayer(picked); go({ name: 'hub' }) }
-      else { setErr(true); setTries((n) => n + 1); setTimeout(() => { setErr(false); setRunes([]) }, 600) }
+    const who = pickedRef.current
+    if (runes.length !== 4 || !who) return
+    let cancel = false
+    const attempt = runes
+    const id = window.setTimeout(() => {
+      void checkRunes(who, attempt, Date.now()).then(async (result) => {
+        if (cancel) return
+        await storage.savePlayer(result.player)
+        setPlayers(await storage.listPlayers())
+        if (result.ok) {
+          setPlayer(result.player)
+          go(homeRoute(result.player, Date.now()))
+        } else {
+          setPicked(result.player)
+          setLocked(result.reason === 'locked')
+          setErr(true)
+          window.setTimeout(() => { setErr(false); setRunes([]) }, 600)
+        }
+      })
     }, 250)
-    return () => clearTimeout(id)
-  }, [runes, picked, go, setPlayer])
+    return () => { cancel = true; window.clearTimeout(id) }
+  }, [runes, go, setPlayer])
 
   if (picked)
     return (
       <Screen className="items-center">
         <div className="flex w-full max-w-4xl flex-1 flex-col items-center justify-center gap-6 sm:flex-row sm:gap-12">
           <div className="flex flex-col items-center gap-3">
-            <Avatar icon={picked.avatar} size="lg" ring={HOUSES[picked.house].color} />
+            <Avatar icon={picked.avatar} size="lg" ring={picked.house ? HOUSES[picked.house].color : undefined} />
             <div className="font-title text-xl text-gold-300">{picked.nickname}</div>
             <div className="flex items-center gap-2 text-parchment/80">{t('tapRunes')} <SpeakButton text={t('tapRunes')} /></div>
-            {tries > 0 && <div className="max-w-60 text-center text-sm text-red-300">{tries >= 5 ? t('locked') : t('wrongRunes')}</div>}
+            {(err || locked) && <div className="max-w-60 text-center text-sm text-red-300">{locked ? t('locked') : t('wrongRunes')}</div>}
             <div className="max-w-60 text-center text-xs text-parchment/50">{t('forgotRunes')}</div>
-            <Button variant="ghost" onClick={() => { setPicked(null); setRunes([]) }}>← {t('back')}</Button>
+            <Button variant="ghost" onClick={() => { setPicked(null); setRunes([]); setLocked(false) }}>← {t('back')}</Button>
           </div>
           <RunePad value={runes} onChange={setRunes} error={err} />
         </div>
       </Screen>
     )
 
+  const visible = players.filter((p) => p.status === 'active')
   return (
     <Screen>
       <div className="flex items-center justify-center gap-2">
         <Title className="text-center">{t('whoAreYou')}</Title>
         <SpeakButton text={t('whoAreYou')} />
       </div>
-      <div className="mx-auto mt-6 grid w-full max-w-4xl grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-6">
-        {players.map((p) => (
+      <form className="mx-auto mt-4 flex w-full max-w-md gap-2" onSubmit={(e) => {
+        e.preventDefault()
+        const found = visible.find((p) => nicknameKey(p.nickname) === nicknameKey(name))
+        setMissing(!found)
+        if (found) setPicked(found)
+      }}>
+        <input
+          value={name} onChange={(e) => { setName(e.target.value); setMissing(false) }} placeholder={t('orFindName')}
+          autoCorrect="off" autoCapitalize="off" autoComplete="off" spellCheck={false}
+          className="min-h-12 flex-1 rounded-xl bg-night-950 px-4 text-parchment outline-none ring-1 ring-gold-400/40"
+        />
+        <Button type="submit">{t('findName')}</Button>
+      </form>
+      {missing && <div className="mt-2 text-center text-sm text-red-300">{t('noSuchWizard')}</div>}
+      <p className="mt-2 text-center text-xs text-parchment/40">{t('demoRunes')}</p>
+      <div className="mx-auto mt-4 grid w-full max-w-4xl grid-cols-3 gap-4 sm:grid-cols-4 lg:grid-cols-6">
+        {visible.map((p) => (
           <button key={p.playerId} onClick={() => setPicked(p)} className="flex flex-col items-center gap-2 rounded-2xl p-3 transition active:scale-95 hover:bg-night-700/50">
-            <Avatar icon={p.avatar} ring={HOUSES[p.house].color} />
+            <Avatar icon={p.avatar} ring={p.house ? HOUSES[p.house].color : undefined} />
             <span className="line-clamp-1 text-sm font-semibold">{p.nickname}</span>
           </button>
         ))}
@@ -98,18 +141,23 @@ export function Login() {
           <span className="text-sm font-semibold text-gold-400">{t('newWizard')}</span>
         </button>
       </div>
+      <div className="mt-6 text-center">
+        <Button variant="ghost" onClick={() => go({ name: 'admin' })}>🧙‍♂️ {t('headmaster')}</Button>
+      </div>
     </Screen>
   )
 }
 
 export function Register() {
-  const { go, setPlayer, player } = useApp()
+  const { go, setPlayer } = useApp()
   const { t, l } = useI18n()
   const [name, setName] = useState('')
   const [avatar, setAvatar] = useState(AVATARS[0])
   const [eng, setEng] = useState<Player['grades']['english']>('movers')
   const [math, setMath] = useState<Player['grades']['math']>(3)
   const [runes, setRunes] = useState<string[]>([])
+  const [taken, setTaken] = useState(false)
+  const [sending, setSending] = useState(false)
   const chip = (on: boolean) => `min-h-11 rounded-xl px-4 font-bold transition ${on ? 'bg-gold-400 text-night-900' : 'bg-night-700 text-parchment ring-1 ring-white/10'}`
   return (
     <Screen>
@@ -119,11 +167,12 @@ export function Register() {
           <label className="flex flex-col gap-1.5">
             <span className="font-title text-gold-300">{t('nickname')}</span>
             <input
-              value={name} onChange={(e) => setName(e.target.value)} placeholder={t('nicknamePh')} maxLength={16}
+              value={name} onChange={(e) => { setName(e.target.value); setTaken(false) }} placeholder={t('nicknamePh')} maxLength={16}
               autoCorrect="off" autoCapitalize="off" autoComplete="off" spellCheck={false}
               className="min-h-12 rounded-xl bg-night-950 px-4 text-lg text-parchment outline-none ring-1 ring-gold-400/40 focus:ring-2"
             />
             <span className="text-xs text-parchment/50">🔒 {t('privacyNote')}</span>
+            {taken && <span className="text-sm text-red-300">{t('nicknameTaken')}</span>}
           </label>
           <div>
             <div className="mb-2 font-title text-gold-300">{t('pickAvatar')}</div>
@@ -154,10 +203,18 @@ export function Register() {
       <div className="mt-5 flex justify-center gap-3">
         <Button variant="ghost" onClick={() => go({ name: 'login' })}>← {t('back')}</Button>
         <Button
-          disabled={!name.trim() || runes.length < 4}
+          disabled={!name.trim() || runes.length < 4 || sending}
           onClick={() => {
-            setPlayer({ ...player, playerId: 'wiz_new', nickname: name.trim(), avatar, grades: { english: eng, math }, housePoints: 0, galleons: 50, status: 'pending', mistakes: [], bestStreak: 0 })
-            go({ name: 'pending' })
+            void (async () => {
+              setSending(true)
+              const nick = nicknameKey(name)
+              const existing = await storage.listPlayers()
+              if (existing.some((p) => nicknameKey(p.nickname) === nick)) { setTaken(true); setSending(false); return }
+              const created = await createPlayer({ nickname: name, avatar, english: eng, math, runes, now: Date.now() })
+              await storage.savePlayer(created)
+              setPlayer(created)
+              go({ name: 'pending' })
+            })()
           }}
         >
           🦉 {t('sendOwl')}
@@ -168,8 +225,15 @@ export function Register() {
 }
 
 export function Pending() {
-  const { go } = useApp()
+  const { go, player, setPlayer } = useApp()
   const { t } = useI18n()
+  const [waiting, setWaiting] = useState(false)
+  const check = async () => {
+    if (!player) { go({ name: 'login' }); return }
+    const fresh = await storage.getPlayer(player.playerId)
+    if (fresh?.status === 'active') { setPlayer(fresh); go(homeRoute(fresh, Date.now())); return }
+    setWaiting(true)
+  }
   return (
     <Screen className="items-center justify-center text-center">
       <div className="flex flex-1 flex-col items-center justify-center gap-5">
@@ -185,8 +249,9 @@ export function Pending() {
           <SpeakButton text={t('owlSending')} />
         </div>
         <p className="max-w-md text-parchment/70">{t('owlWait')}</p>
-        {/* Prototype shortcut: pretend Dad approved */}
-        <Button variant="ghost" onClick={() => go({ name: 'sorting' })}>(Prototype) Dad approved → </Button>
+        {waiting && <div className="text-sm text-gold-300">{t('stillWaiting')}</div>}
+        <Button onClick={() => void check()}>🦉 {t('checkApproval')}</Button>
+        <Button variant="ghost" onClick={() => { setPlayer(null); go({ name: 'login' }) }}>{t('back')}</Button>
       </div>
     </Screen>
   )
@@ -207,6 +272,7 @@ export function Sorting() {
     return (Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'gryffindor') as HouseId
   }, [votes])
 
+  if (!player) return null
   if (step < SORTING_QUESTIONS.length) {
     const q = SORTING_QUESTIONS[step]
     return (
@@ -270,7 +336,8 @@ export function Sorting() {
 export function WandChoice() {
   const { go, player, setPlayer } = useApp()
   const { t } = useI18n()
-  const [core, setCore] = useState(player.wand.core)
+  const [core, setCore] = useState(player?.wand.core ?? 'phoenix')
+  if (!player) return null
   return (
     <Screen className="items-center">
       <Title className="text-center">{t('wandTitle')}</Title>
@@ -286,16 +353,17 @@ export function WandChoice() {
           </button>
         ))}
       </div>
-      <Button className="mt-6" onClick={() => { setPlayer({ ...player, wand: { ...player.wand, core } }); go({ name: 'card' }) }}>{t('next')} →</Button>
+      <Button className="mt-6" onClick={() => { setPlayer({ ...player, wand: { ...player.wand, core }, wandChosen: true }); go({ name: 'card' }) }}>{t('next')} →</Button>
     </Screen>
   )
 }
 
 export function WizardCard() {
-  const { go, player } = useApp()
+  const { go, player, setPlayer } = useApp()
   const { t, l } = useI18n()
-  const core = WAND_CORES.find((c) => c.id === player.wand.core)!
+  const core = WAND_CORES.find((c) => c.id === player?.wand.core)
   useEffect(() => { confetti({ particleCount: 120, spread: 80, origin: { y: 0.6 }, colors: ['#e9c46a', '#f6dc8f', '#ffffff'] }) }, [])
+  if (!player?.house || !core) return null
   return (
     <Screen className="items-center justify-center">
       <motion.div initial={{ rotateY: 90 }} animate={{ rotateY: 0 }} transition={{ duration: 0.8 }}>
@@ -312,13 +380,13 @@ export function WizardCard() {
           </div>
         </Parchment>
       </motion.div>
-      <Button className="mt-6" onClick={() => go({ name: 'story' })}>{t('begin')} →</Button>
+      <Button className="mt-6" onClick={() => { setPlayer({ ...player, cardSeen: true }); go({ name: 'story' }) }}>{t('begin')} →</Button>
     </Screen>
   )
 }
 
 export function Story() {
-  const { go } = useApp()
+  const { go, player, setPlayer } = useApp()
   const { t } = useI18n()
   const [i, setI] = useState(0)
   const lines = [t('story1'), t('story2'), t('story3')]
@@ -333,7 +401,7 @@ export function Story() {
         {lines[i]} <SpeakButton text={lines[i]} />
       </motion.p>
       <div className="mt-6">
-        {i < lines.length - 1 ? <Button onClick={() => setI(i + 1)}>{t('next')} →</Button> : <Button onClick={() => go({ name: 'hub' })}>⚡ {t('imIn')}</Button>}
+        {i < lines.length - 1 ? <Button onClick={() => setI(i + 1)}>{t('next')} →</Button> : <Button onClick={() => { if (player) setPlayer({ ...player, storySeen: true }); go({ name: 'hub' }) }}>⚡ {t('imIn')}</Button>}
       </div>
     </Screen>
   )

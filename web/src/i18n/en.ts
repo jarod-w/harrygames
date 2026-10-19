@@ -12,6 +12,12 @@ export const en = {
   wrongRunes: 'Those runes are not right. Try again!',
   locked: 'Too many tries. The door is locked for 3 minutes.',
   forgotRunes: 'Forgot your runes? Ask the headmaster (Dad) to reset them.',
+  demoRunes: 'Sample wizards use Owl, Wand, Broom, Lightning.',
+  orFindName: 'Or type a wizard name',
+  findName: 'Find',
+  noSuchWizard: 'No wizard has that name yet.',
+  nicknameTaken: 'Another wizard already uses that name.',
+  headmaster: "Headmaster's office",
   back: 'Back',
   next: 'Next',
   clear: 'Clear',
@@ -30,6 +36,8 @@ export const en = {
   // pending
   owlSending: 'The owl is flying your letter to the headmaster…',
   owlWait: 'When the headmaster approves, you can enter the castle.',
+  checkApproval: 'Has the owl come back?',
+  stillWaiting: 'Not yet. The headmaster is still reading your letter.',
 
   // sorting
   sortingTitle: 'The Sorting Hat',
@@ -99,6 +107,7 @@ export const en = {
   shieldUsed: 'Unicorn hair protected you! Your streak is safe.',
   levelUp: 'Level up! Harder questions coming.',
   levelDown: "Let's try slightly easier ones.",
+  aboveGrade: 'These questions are above the chosen level. A grown-up can raise it in Settings.',
   sec: 's',
 
   // result
@@ -115,6 +124,7 @@ export const en = {
   attack: 'Correct! A letter flies back into the book!',
   counter: 'Inkshade strikes back!',
   bossWin: 'Inkshade is full and sleepy… it becomes the guardian of the library!',
+  bossLose: 'Inkshade is still hungry. Rest, then try the Great Hall again.',
 
   // house cup
   houseCupTitle: 'The House Cup',
@@ -129,6 +139,8 @@ export const en = {
   pensieveDesc: 'Memories Inkshade is still hiding. Get each one right twice to take it back.',
   practice: 'Practise these',
   recovered: 'recovered',
+  pensieveEmpty: 'The basin is clear. Inkshade is not hiding any memories.',
+  dueNow: 'ready to practise',
 
   // shop
   shopTitle: 'Ollivanders Wand Looks',
@@ -140,10 +152,13 @@ export const en = {
   lightsOut: 'Lights out!',
   curfewMsg: 'Young wizards need rest. Inkshade is strongest in the dark, so the castle sleeps.',
   lightsBack: 'The castle lights come back in',
+  enterCastle: 'The lights are back',
 
   // settings
   language: 'Language',
   speakHelp: 'Tap the speaker buttons to hear text read aloud.',
+  changeGrades: 'English and maths levels',
+  gradesSaved: 'Saved. The next lesson starts from the new level.',
 
   // admin
   adminTitle: "Headmaster's Office",
@@ -152,6 +167,11 @@ export const en = {
   reject: 'Reject',
   allPlayers: 'All wizards',
   resetRunes: 'Reset runes',
+  runesUpdated: 'New runes saved.',
+  setHeadRunes: 'Choose the headmaster’s 4 runes',
+  headRunesHint: 'Only a grown-up should know these. They stay on this device.',
+  headEnter: 'Enter the headmaster’s runes',
+  rejectedNote: 'The letter was sent back.',
   stayingAbove: 'Often above grade — consider raising',
 
   // misc
