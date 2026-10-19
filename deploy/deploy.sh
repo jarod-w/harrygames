@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Build the web app and (re)start the Caddy container.
+set -euo pipefail
+cd "$(dirname "$0")/../web"
+npm ci --no-audit --no-fund
+npm run build
+cd ../deploy
+docker compose up -d
+docker compose restart web
