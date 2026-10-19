@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import type { Question } from '../data/types'
+import type { Outcome, Question } from '../data/types'
 import { checkAnswer } from '../data/questions'
 import { speak, useI18n } from '../i18n'
 import { LetterStones, NumberPad } from './keyboards'
 import { Bar, Button, SpeakButton } from './ui'
 
-export type Outcome = 'first' | 'hint' | 'wrong'
+export type { Outcome }
 
 // Shared by every classroom and the Boss battle. Wrong-answer rules from §4.2 / Q4 / Q10:
 // 1st wrong (or time-out) -> hint + retry with a fresh timer; 2nd -> show answer + explanation.
-export function QuestionPlay({ q, seconds, keyboard, onDone }: { q: Question; seconds: number; keyboard: 'letters' | 'numbers'; onDone: (o: Outcome) => void }) {
+export function QuestionPlay({ q, seconds, keyboard, onDone, onMiss }: { q: Question; seconds: number; keyboard: 'letters' | 'numbers'; onDone: (o: Outcome) => void; onMiss?: () => void }) {
   const { t, l, lang } = useI18n()
   const [input, setInput] = useState('')
   const [attempt, setAttempt] = useState(0)
@@ -35,9 +35,10 @@ export function QuestionPlay({ q, seconds, keyboard, onDone }: { q: Question; se
   const fail = useCallback((byTime: boolean) => {
     setTimedOut(byTime)
     setShake((n) => n + 1)
+    onMiss?.()
     if (attempt === 0) { setAttempt(1); setPhase('hint') }
     else setPhase('reveal')
-  }, [attempt])
+  }, [attempt, onMiss])
 
   useEffect(() => {
     if (phase !== 'answering') return

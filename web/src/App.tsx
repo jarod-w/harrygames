@@ -1,20 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AppContext, type Route } from './app/state'
+import { isPlayRoute } from './game/flow'
+import { isResting, tickCurfew } from './game/curfew'
 import { I18nProvider, useI18n } from './i18n'
 import type { Player } from './data/types'
 import { Login, Pending, Register, Sorting, Splash, Story, WandChoice, WizardCard } from './screens/onboarding'
-import { Boss, Classroom, Hub, Result } from './screens/play'
+import { Boss, Classroom, Hub, Result, Review } from './screens/play'
 import { Admin, Curfew, HouseCup, Pensieve, Settings, Shop } from './screens/meta'
+import { SESSION_KEY, storage } from './services/StorageService'
 
-const DEMO: Player = {
-  schemaVersion: 1, playerId: 'wiz_001', nickname: 'Little Hermione', avatar: '🦉', house: 'ravenclaw',
-  wand: { core: 'phoenix', skin: 'skin_oak' }, grades: { english: 'movers', math: 4 }, level: 3,
-  housePoints: 350, galleons: 120,
-  stats: { english: { answered: 120, correct: 98 }, math: { answered: 80, correct: 61 } },
-  bestStreak: 14, mistakes: [], inventory: ['skin_oak'], unlockedAchievements: [], customSettings: {}, status: 'active',
-}
+const toHash = (r: Route) => (r.name === 'classroom' ? `classroom/${r.id}` : r.name === 'result' ? 'result' : r.name)
 
-// Prototype: every screen is reachable by URL hash, e.g. #hub, #classroom/potions
 const SCREENS: { label: string; route: Route }[] = [
   { label: '1 · Splash 开场', route: { name: 'splash' } },
   { label: '2 · Login 登录', route: { name: 'login' } },
@@ -28,22 +24,24 @@ const SCREENS: { label: string; route: Route }[] = [
   { label: '10 · Charms 魔咒课', route: { name: 'classroom', id: 'charms' } },
   { label: '11 · Potions 魔药课', route: { name: 'classroom', id: 'potions' } },
   { label: '12 · Arithmancy 算术占卜', route: { name: 'classroom', id: 'arithmancy' } },
-  { label: '13 · Result 结算', route: { name: 'result', id: 'charms', correct: 4, total: 5, streak: 3 } },
+  { label: '13 · Result 结算', route: { name: 'result', id: 'charms', correct: 4, total: 5, streak: 3, points: 40, gold: 20 } },
   { label: '14 · Boss 墨影', route: { name: 'boss' } },
   { label: '15 · House Cup 学院杯', route: { name: 'houseCup' } },
   { label: '16 · Pensieve 冥想盆', route: { name: 'pensieve' } },
-  { label: '17 · Diagon Alley 对角巷', route: { name: 'shop' } },
-  { label: '18 · Curfew 宵禁', route: { name: 'curfew' } },
-  { label: '19 · Settings 设置', route: { name: 'settings' } },
-  { label: '20 · Admin 校长办公室', route: { name: 'admin' } },
+  { label: '17 · Pensieve practice', route: { name: 'review' } },
+  { label: '18 · Diagon Alley 对角巷', route: { name: 'shop' } },
+  { label: '19 · Curfew 宵禁', route: { name: 'curfew' } },
+  { label: '20 · Settings 设置', route: { name: 'settings' } },
+  { label: '21 · Admin 校长办公室', route: { name: 'admin' } },
 ]
 
-const toHash = (r: Route) => (r.name === 'classroom' ? `classroom/${r.id}` : r.name)
 function fromHash(): Route {
   const h = location.hash.slice(1)
   const s = SCREENS.find((x) => toHash(x.route) === h)
   return s?.route ?? { name: 'splash' }
 }
+
+const NEEDS_PLAYER = new Set<Route['name']>(['sorting', 'wand', 'card', 'story', 'settings', 'result', 'review'])
 
 function ProtoMenu({ go }: { go: (r: Route) => void }) {
   const [open, setOpen] = useState(false)
@@ -88,13 +86,92 @@ function RotateHint() {
 
 function Router() {
   const [route, setRoute] = useState<Route>(fromHash)
-  const [player, setPlayer] = useState<Player>(DEMO)
-  const [sessionStart] = useState(Date.now())
-  const [nonce, setNonce] = useState(0)
-  const go = (r: Route) => { setRoute(r); setNonce((n) => n + 1); history.replaceState(null, '', '#' + toHash(r)); window.scrollTo(0, 0) }
-  useEffect(() => { const f = () => setRoute(fromHash()); window.addEventListener('hashchange', f); return () => window.removeEventListener('hashchange', f) }, [])
+  const [player, setPlayerState] = useState<Player | null>(null)
+  const [now, setNow] = useState(() => Date.now())
+  const playerRef = useRef<Player | null>(null)
+  const routeRef = useRef(route)
+  const holdRef = useRef(false)
+  const lightsRef = useRef(false)
+  useEffect(() => { routeRef.current = route }, [route])
+
+  const setPlayer = useCallback((p: Player | null) => {
+    playerRef.current = p
+    setPlayerState(p)
+    if (p) sessionStorage.setItem(SESSION_KEY, p.playerId)
+    else sessionStorage.removeItem(SESSION_KEY)
+  }, [])
+
+  const patchPlayer = useCallback((fn: (p: Player) => Player) => {
+    if (!playerRef.current) return null
+    const next = fn(playerRef.current)
+    playerRef.current = next
+    setPlayerState(next)
+    return next
+  }, [])
+
+  const setHoldCurfew = useCallback((held: boolean) => { holdRef.current = held }, [])
+  const takeLightsOut = useCallback(() => {
+    const due = lightsRef.current
+    lightsRef.current = false
+    return due
+  }, [])
+
+  const go = useCallback((r: Route) => {
+    const current = playerRef.current
+    const next = current && isPlayRoute(r) && isResting(current.curfew, Date.now()) ? { name: 'curfew' as const } : r
+    routeRef.current = next
+    setRoute(next)
+    history.replaceState(null, '', '#' + toHash(next))
+    window.scrollTo(0, 0)
+  }, [])
+
+  const goRef = useRef(go)
+  useEffect(() => { goRef.current = go }, [go])
+
+  useEffect(() => {
+    const onHash = () => {
+      const next = fromHash()
+      routeRef.current = next
+      setRoute(next)
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  useEffect(() => {
+    if (player) void storage.savePlayer(player)
+  }, [player])
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const at = Date.now()
+      setNow(at)
+      const current = playerRef.current
+      if (!current || current.status !== 'active') return
+      const tick = tickCurfew(current.curfew, at, { paused: routeRef.current.name === 'curfew' })
+      const latest = playerRef.current
+      if (!latest) return
+      const next = { ...latest, curfew: tick.state }
+      playerRef.current = next
+      setPlayerState(next)
+      if (tick.justOut && holdRef.current) lightsRef.current = true
+      if (tick.resting && !holdRef.current && isPlayRoute(routeRef.current)) goRef.current({ name: 'curfew' })
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const preview = useCallback(async (r: Route) => {
+    const needs = isPlayRoute(r) || NEEDS_PLAYER.has(r.name)
+    if (needs && !playerRef.current) {
+      const sample = (await storage.listPlayers()).find((p) => p.status === 'active' && p.house)
+      if (sample) setPlayer(sample)
+    }
+    go(r)
+  }, [go, setPlayer])
 
   const screen = (() => {
+    const needs = isPlayRoute(route) || NEEDS_PLAYER.has(route.name)
+    if (needs && !player) return <Login />
     switch (route.name) {
       case 'splash': return <Splash />
       case 'login': return <Login />
@@ -105,11 +182,12 @@ function Router() {
       case 'card': return <WizardCard />
       case 'story': return <Story />
       case 'hub': return <Hub />
-      case 'classroom': return <Classroom key={nonce} id={route.id} />
+      case 'classroom': return <Classroom key={route.id} id={route.id} />
       case 'result': return <Result {...route} />
       case 'boss': return <Boss />
       case 'houseCup': return <HouseCup />
       case 'pensieve': return <Pensieve />
+      case 'review': return <Review />
       case 'shop': return <Shop />
       case 'curfew': return <Curfew />
       case 'settings': return <Settings />
@@ -118,9 +196,18 @@ function Router() {
   })()
 
   return (
-    <AppContext.Provider value={{ route, go, player, setPlayer, sessionStart }}>
+    <AppContext.Provider value={{
+      route,
+      go,
+      player,
+      setPlayer,
+      patchPlayer,
+      setHoldCurfew,
+      takeLightsOut,
+      now,
+    }}>
       {screen}
-      <ProtoMenu go={go} />
+      <ProtoMenu go={preview} />
       <RotateHint />
     </AppContext.Provider>
   )
