@@ -1,0 +1,19 @@
+{
+  "name": "hogwarts-server",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node --experimental-strip-types --watch src/index.ts",
+    "start": "node --experimental-strip-types src/index.ts",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "test": "node --experimental-strip-types --test test/api.test.ts"
+  },
+  "dependencies": {
+    "hono": "^4.10.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2"
+  }
+}

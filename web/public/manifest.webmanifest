@@ -1,0 +1,11 @@
+{
+  "name": "Hogwarts: The Spell & Arithmancy Trial",
+  "short_name": "Hogwarts",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#120d1f",
+  "theme_color": "#120d1f",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

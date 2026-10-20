@@ -10,7 +10,6 @@ import type { EnglishLevel, MathGrade, Player } from '../data/types'
 import { curfewRemaining } from '../game/curfew'
 import { ABOVE_HINT_AT } from '../game/difficulty'
 import { setGrades } from '../game/player'
-import { lockRunes, matchesLock, withRunes } from '../game/password'
 import { storage } from '../services/StorageService'
 import { useI18n } from '../i18n'
 
@@ -209,40 +208,58 @@ export function Admin() {
   const [gate, setGate] = useState<'loading' | 'set' | 'enter' | 'open'>('loading')
   const [runes, setRunes] = useState<string[]>([])
   const [err, setErr] = useState(false)
+  const [locked, setLocked] = useState(false)
+  const [offline, setOffline] = useState(false)
   const [resetId, setResetId] = useState<string | null>(null)
   const [resetRunes, setResetRunes] = useState<string[]>([])
   const reload = async () => setPs(await storage.listPlayers())
   useEffect(() => {
-    void (async () => {
-      const lock = await storage.getHeadmaster()
-      setGate(lock ? 'enter' : 'set')
-      await reload()
-    })()
+    void storage.headmasterSet().then((set) => setGate(set ? 'enter' : 'set')).catch(() => setGate('enter'))
   }, [])
+
+  useEffect(() => {
+    if (gate !== 'open') return
+    let cancel = false
+    void (async () => {
+      const next = await storage.listPlayers()
+      if (!cancel) setPs(next)
+    })()
+    return () => { cancel = true }
+  }, [gate])
 
   useEffect(() => {
     if (runes.length !== 4 || gate === 'open' || gate === 'loading') return
     let cancel = false
     const id = window.setTimeout(() => {
       void (async () => {
-        if (gate === 'set') {
-          await storage.saveHeadmaster(await lockRunes(runes))
-          if (!cancel) { setGate('open'); setRunes([]) }
-          return
+        try {
+          if (gate === 'set') {
+            await storage.setupHeadmaster(runes)
+            if (!cancel) { setOffline(false); setGate('open'); setRunes([]); setErr(false) }
+            return
+          }
+          const result = await storage.unlockHeadmaster(runes, Date.now())
+          if (cancel) return
+          if (result.ok) { setOffline(false); setGate('open'); setErr(false); setLocked(false); setRunes([]) }
+          else {
+            setOffline(false)
+            setLocked(result.reason === 'locked')
+            setErr(true)
+            window.setTimeout(() => { setErr(false); setRunes([]) }, 500)
+          }
+        } catch {
+          if (cancel) return
+          setOffline(true)
+          setErr(true)
+          window.setTimeout(() => { setErr(false); setOffline(false); setRunes([]) }, 800)
         }
-        const lock = await storage.getHeadmaster()
-        if (!lock || cancel) return
-        const ok = await matchesLock(lock, runes)
-        if (ok) { setGate('open'); setErr(false); setRunes([]) }
-        else { setErr(true); window.setTimeout(() => { setErr(false); setRunes([]) }, 500) }
       })()
     }, 200)
     return () => { cancel = true; window.clearTimeout(id) }
   }, [runes, gate])
 
   const approve = async (p: Player) => {
-    const next = { ...p, status: 'active' as const }
-    await storage.savePlayer(next)
+    const next = await storage.approvePlayer(p.playerId)
     if (player?.playerId === p.playerId) setPlayer(next)
     await reload()
   }
@@ -254,8 +271,7 @@ export function Admin() {
   }
   const saveReset = async (p: Player) => {
     if (resetRunes.length < 4) return
-    const next = await withRunes(p, resetRunes)
-    await storage.savePlayer(next)
+    const next = await storage.resetRunes(p.playerId, resetRunes)
     if (player?.playerId === p.playerId) setPlayer(next)
     setResetId(null)
     setResetRunes([])
@@ -269,6 +285,7 @@ export function Admin() {
         <Title className="text-center">{t('adminTitle')}</Title>
         <p className="mt-2 max-w-md text-center text-parchment/70">{gate === 'set' ? t('setHeadRunes') : t('headEnter')}</p>
         <p className="mb-4 max-w-md text-center text-xs text-parchment/50">{t('headRunesHint')}</p>
+        {(err || locked) && <div className="mb-3 max-w-md text-center text-sm text-red-300">{offline ? t('reachTower') : locked ? t('locked') : t('wrongRunes')}</div>}
         <RunePad value={runes} onChange={setRunes} error={err} />
       </Screen>
     )
