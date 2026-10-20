@@ -3,14 +3,13 @@ import { motion } from 'motion/react'
 import confetti from 'canvas-confetti'
 import { useApp } from '../app/state'
 import { homeRoute } from '../game/flow'
-import { createPlayer, nicknameKey } from '../game/player'
-import { checkRunes } from '../game/password'
+import { nicknameKey } from '../game/player'
 import { Avatar, Button, Crest, Panel, Parchment, Screen, SpeakButton, Title } from '../components/ui'
 import { RunePad } from '../components/keyboards'
 import { CastleSilhouette, Inkshade, Wand } from '../components/art'
 import { AVATARS, ENGLISH_LEVELS, HOUSE_IDS, HOUSES, MATH_GRADES, SORTING_QUESTIONS, WAND_CORES, WAND_SKINS } from '../data/catalog'
 import type { HouseId, Player } from '../data/types'
-import { SESSION_KEY, storage } from '../services/StorageService'
+import { SESSION_KEY, storage, StorageError } from '../services/StorageService'
 import { useI18n } from '../i18n'
 
 export function Splash() {
@@ -59,6 +58,7 @@ export function Login() {
   const [name, setName] = useState('')
   const [missing, setMissing] = useState(false)
   const [locked, setLocked] = useState(false)
+  const [down, setDown] = useState(false)
   const [err, setErr] = useState(false)
 
   const pickedRef = useRef(picked)
@@ -72,19 +72,24 @@ export function Login() {
     let cancel = false
     const attempt = runes
     const id = window.setTimeout(() => {
-      void checkRunes(who, attempt, Date.now()).then(async (result) => {
+      void storage.login(who.playerId, attempt, Date.now()).then((result) => {
         if (cancel) return
-        await storage.savePlayer(result.player)
-        setPlayers(await storage.listPlayers())
-        if (result.ok) {
+        if (result.ok && result.player) {
+          setDown(false)
           setPlayer(result.player)
           go(homeRoute(result.player, Date.now()))
         } else {
-          setPicked(result.player)
+          setDown(false)
           setLocked(result.reason === 'locked')
           setErr(true)
           window.setTimeout(() => { setErr(false); setRunes([]) }, 600)
         }
+      }).catch(() => {
+        if (cancel) return
+        setDown(true)
+        setLocked(false)
+        setErr(true)
+        window.setTimeout(() => { setErr(false); setRunes([]); setDown(false) }, 1200)
       })
     }, 250)
     return () => { cancel = true; window.clearTimeout(id) }
@@ -98,7 +103,7 @@ export function Login() {
             <Avatar icon={picked.avatar} size="lg" ring={picked.house ? HOUSES[picked.house].color : undefined} />
             <div className="font-title text-xl text-gold-300">{picked.nickname}</div>
             <div className="flex items-center gap-2 text-parchment/80">{t('tapRunes')} <SpeakButton text={t('tapRunes')} /></div>
-            {(err || locked) && <div className="max-w-60 text-center text-sm text-red-300">{locked ? t('locked') : t('wrongRunes')}</div>}
+            {(err || locked || down) && <div className="max-w-60 text-center text-sm text-red-300">{down ? t('reachTower') : locked ? t('locked') : t('wrongRunes')}</div>}
             <div className="max-w-60 text-center text-xs text-parchment/50">{t('forgotRunes')}</div>
             <Button variant="ghost" onClick={() => { setPicked(null); setRunes([]); setLocked(false) }}>← {t('back')}</Button>
           </div>
@@ -157,6 +162,7 @@ export function Register() {
   const [math, setMath] = useState<Player['grades']['math']>(3)
   const [runes, setRunes] = useState<string[]>([])
   const [taken, setTaken] = useState(false)
+  const [down, setDown] = useState(false)
   const [sending, setSending] = useState(false)
   const chip = (on: boolean) => `min-h-11 rounded-xl px-4 font-bold transition ${on ? 'bg-gold-400 text-night-900' : 'bg-night-700 text-parchment ring-1 ring-white/10'}`
   return (
@@ -173,6 +179,7 @@ export function Register() {
             />
             <span className="text-xs text-parchment/50">🔒 {t('privacyNote')}</span>
             {taken && <span className="text-sm text-red-300">{t('nicknameTaken')}</span>}
+            {down && <span className="text-sm text-red-300">{t('reachTower')}</span>}
           </label>
           <div>
             <div className="mb-2 font-title text-gold-300">{t('pickAvatar')}</div>
@@ -207,13 +214,16 @@ export function Register() {
           onClick={() => {
             void (async () => {
               setSending(true)
-              const nick = nicknameKey(name)
-              const existing = await storage.listPlayers()
-              if (existing.some((p) => nicknameKey(p.nickname) === nick)) { setTaken(true); setSending(false); return }
-              const created = await createPlayer({ nickname: name, avatar, english: eng, math, runes, now: Date.now() })
-              await storage.savePlayer(created)
-              setPlayer(created)
-              go({ name: 'pending' })
+              setDown(false)
+              try {
+                const created = await storage.register({ nickname: name, avatar, english: eng, math, runes, now: Date.now() })
+                setPlayer(created)
+                go({ name: 'pending' })
+              } catch (err) {
+                if (err instanceof StorageError && err.code === 'taken') setTaken(true)
+                else setDown(true)
+                setSending(false)
+              }
             })()
           }}
         >

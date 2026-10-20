@@ -98,7 +98,10 @@ function Router() {
     playerRef.current = p
     setPlayerState(p)
     if (p) sessionStorage.setItem(SESSION_KEY, p.playerId)
-    else sessionStorage.removeItem(SESSION_KEY)
+    else {
+      sessionStorage.removeItem(SESSION_KEY)
+      void storage.endSession()
+    }
   }, [])
 
   const patchPlayer = useCallback((fn: (p: Player) => Player) => {
